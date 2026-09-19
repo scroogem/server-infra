@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenCode web UI (:4096)
+Documentation=https://opencode.ai
+
+[Service]
+Type=simple
+WorkingDirectory=/home/max
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+ExecStart=/usr/bin/opencode web --hostname 0.0.0.0 --port 4096
+Restart=always
+RestartSec=3
+KillMode=mixed
+TimeoutStopSec=20
+OOMScoreAdjust=-1000
+
+[Install]
+WantedBy=default.target

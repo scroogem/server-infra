@@ -1,0 +1,11 @@
+tunnel: 6b77100a-d47e-4ce7-b895-458be95603ed
+credentials-file: /etc/cloudflared/6b77100a-d47e-4ce7-b895-458be95603ed.json
+
+# Отличие от конфига на VPS: там сервисы адресовались как localhost:5000/5001,
+# здесь — по именам контейнеров во внутренней сети compose.
+ingress:
+  - hostname: api.vairyapp.com
+    service: http://vairy:5000
+  - hostname: talkyapi.vairyapp.com
+    service: http://talky:5001
+  - service: http_status:404

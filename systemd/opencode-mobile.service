@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenCode mobile proxy (:4097)
+After=opencode-web.service
+Wants=opencode-web.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/max/opencode-mobile
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# do not start serving 502s before the backend answers
+ExecStartPre=/bin/sh -c 'i=0; while [ $i -lt 90 ]; do curl -sfo /dev/null http://127.0.0.1:4096/ && exit 0; i=$((i+1)); sleep 1; done; exit 0'
+ExecStart=/usr/bin/node /home/max/opencode-mobile/server.js
+Restart=always
+RestartSec=3
+OOMScoreAdjust=-900
+
+[Install]
+WantedBy=default.target

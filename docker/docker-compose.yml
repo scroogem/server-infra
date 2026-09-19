@@ -1,0 +1,72 @@
+name: vairy-stack
+
+# Наружу не публикуется ни один порт. Единственный вход в стек — Cloudflare Tunnel,
+# который ходит к приложениям по внутренней docker-сети (vairy:5000, talky:5001).
+
+x-health: &health-defaults
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 40s
+
+services:
+  vairy:
+    build: ./vairy
+    container_name: vairy
+    # Бэкенд остановлен как ненужный (16.08.2026). Сервис оставлен в описании,
+    # но не поднимается обычным `up -d` — только явно:
+    #   docker compose --profile optional up -d vairy
+    profiles: ["optional"]
+    restart: unless-stopped
+    env_file: ./vairy/.env
+    expose:
+      - "5000"
+    healthcheck:
+      # У vairy есть только "/", у talky нет и его — поэтому проверяем TCP-сокет,
+      # а не HTTP-путь: так healthcheck не сломается от изменений роутинга.
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',5000),3).close()"]
+      <<: *health-defaults
+    networks:
+      - internal
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  talky:
+    build: ./talky
+    container_name: talky
+    restart: unless-stopped
+    env_file: ./talky/.env
+    expose:
+      - "5001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',5001),3).close()"]
+      <<: *health-defaults
+    networks:
+      - internal
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    # root внутри контейнера — чтобы читать credentials-файл с правами 600,
+    # лежащий на хосте под пользователем max. Портов контейнер не открывает.
+    user: "0:0"
+    command: tunnel --config /etc/cloudflared/config.yml run vairy-api
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      talky:
+        condition: service_healthy
+    networks:
+      - internal
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+networks:
+  internal:
+    driver: bridge

@@ -1,0 +1,22 @@
+# Соответствие локальных путей и GitHub-репозиториев (машина giadaserver)
+
+Локальный путь -> GitHub
+
+/home/max/projects -> scroogem/vairy (branch feature/db-swap)
+/home/max/projects/OmniRoute -> diegosouzapw/OmniRoute (upstream, локальные правки)
+/home/max/projects/career-ops -> santifer/career-ops (upstream)
+/home/max/projects/hearth -> scroogem/hearth (private)
+/home/max/projects/claude-web -> scroogem/claude-web (private)
+/home/max/projects/gramgift -> scroogem/gramgift (private)
+/home/max/stack/talky -> scroogem/talky (private)
+/home/max/stack/vairy -> scroogem/vairy-deploy (private)
+/home/max/opencode-mobile -> scroogem/opencode-mobile (private)
+/home/max/stack/server-infra -> scroogem/server-infra (private) <-- этот репо
+
+Прочие репо аккаунта scroogem:
+Lambo (private), miniapp (public), qheid (private), taouse (public), vairy-site (public)
+
+ПРИМЕЧАНИЕ:
+- Для вложенных в /home/max/projects репо добавлены в .gitignore:
+  OmniRoute/, career-ops/, claude-web/, gramgift/, hearth/ (не закоммитить случайно).
+- Из бэкапов исключены: node_modules/, target/, .env, data/ (claude-web), .github/workflows/.

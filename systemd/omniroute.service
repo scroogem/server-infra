@@ -1,0 +1,17 @@
+[Unit]
+Description=OmniRoute dev server (Next.js)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/max/projects/OmniRoute
+Environment=PATH=/home/max/.npm-global/bin:/usr/bin:/bin
+Environment=NODE_ENV=development
+ExecStart=/usr/bin/node --max-old-space-size=3072 scripts/dev/run-next.mjs dev
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/max/.omniroute-dev.log
+StandardError=append:/home/max/.omniroute-dev.log
+
+[Install]
+WantedBy=default.target
