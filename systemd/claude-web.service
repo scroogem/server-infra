@@ -1,0 +1,13 @@
+[Unit]
+Description=claude-web (Claude Agent SDK local server + web UI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/max/projects/claude-web
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

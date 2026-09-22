@@ -6,6 +6,42 @@
 
 ---
 
+## ⚡ Быстрый старт — одна команда
+
+Всё восстановление автоматизировано скриптом [`bootstrap.sh`](bootstrap.sh).
+Быстрее всего перенести систему следующим образом:
+
+1. **Заполнить секреты.** На этой машине скопируйте шаблон и заполните ключи:
+   ```bash
+   cp secrets.env.example secrets.env
+   $EDITOR secrets.env
+   ```
+   Все значения секретов — из проекта/сервера (см. раздел 6 «Где лежат секреты»).
+   Для туннеля дополнительно нужен `CLOUDFLARED_CREDENTIALS_JSON`
+   (`cat ~/stack/cloudflared/*.json`) и `CLAUDE_CREDENTIALS_B64`
+   (`base64 -w0 ~/.claude/.credentials.json`).
+
+2. **Перенести на новый сервер** (в любом месте, куда есть sudo-доступ):
+   ```bash
+   scp -r ~/stack/server-infra user@newserver:/opt/server-infra
+   scp secrets.env user@newserver:/opt/server-infra/
+   ```
+
+3. **Запустить на новом сервере:**
+   ```bash
+   sudo bash /opt/server-infra/bootstrap.sh /opt/server-infra/secrets.env
+   ```
+
+Скрипт сам: ставит пакеты (git/docker/node/pnpm/tailscale), клонирует все
+проекты, раскладывает `.env`, ставит systemd-юниты, поднимает Docker-стек
+vairy+talky+cloudflared, включает opencode/claude-web и печатает сводку
+проверок доступности. Идемпотентен — перезапуск безопасен.
+
+Опции: `SKIP_FOREIGN=1` (не клонировать OmniRoute/career-ops, по умолчанию),
+`KEEP_SECRETS=1` (не удалять `secrets.env` после выполнения).
+
+---
+
 ## 1. Железо и ОС
 
 - Слабая машина, **RAM ~3.7 GiB**, swap ~3.7 GiB. OOM-kill реальны!

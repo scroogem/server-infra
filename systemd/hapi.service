@@ -1,0 +1,16 @@
+[Unit]
+Description=HAPI Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=max
+Environment=HAPI_LISTEN_HOST=0.0.0.0
+Environment=HAPI_LISTEN_PORT=3006
+ExecStart=/usr/bin/hapi hub
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Tailscale Funnel -> opencode mobile proxy (:4097)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# tailscaled is often not logged in yet at this point in boot, so retry the
+# real operation instead of guessing a readiness condition
+ExecStart=/bin/sh -c 'i=0; while [ $i -lt 60 ]; do /usr/bin/tailscale funnel --bg 4097 && exit 0; i=$((i+1)); sleep 2; done; exit 1'
+ExecStop=/usr/bin/tailscale funnel --https=443 off
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
