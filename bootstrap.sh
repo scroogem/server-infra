@@ -79,19 +79,22 @@ else
 fi
 
 # ---------- 2. node/pnpm поверх distro ----------
-if ! have pnpm; then
-  say "Устанавливаю pnpm..."
-  npm install -g --allow-scripts=pnpm pnpm
-fi
-export PATH="$HOME/.npm-global/bin:$PATH"
+# npm-глобаля ставим от RUN_USER: у него prefix=~/.npmrc -> ~/.npm-global.
+npm_prefix() { sudo -u "$RUN_USER" npm prefix -g 2>/dev/null || echo "$RUN_HOME/.npm-global"; }
+export PATH="$(npm_prefix)/bin:$PATH"
 
-# ---------- 3. hapi (HAPI hub, systemd юнит hapi.service) ----------
+if ! sudo -u "$RUN_USER" "$(npm_prefix)/bin/pnpm" --version >/dev/null 2>&1; then
+  say "Устанавливаю pnpm (для $RUN_USER)..."
+  sudo -u "$RUN_USER" npm install -g --allow-scripts=pnpm pnpm
+fi
+
+# ---------- 3. hapi (HAPI hub, systemd юнит hapi.service -> /usr/bin/hapi) ----------
 if ! have hapi; then
   say "Устанавливаю hapi (@twsxtd/hapi)..."
   npm install -g @twsxtd/hapi || warn "hapi не установился — пропускаю."
 fi
 
-# ---------- 4. claude CLI ----------
+# ---------- 4. claude CLI (systemd-путь /usr/bin/claude) ----------
 if ! have claude; then
   say "Устанавливаю claude CLI..."
   npm install -g @anthropic-ai/claude-code || warn "claude CLI не установился."
