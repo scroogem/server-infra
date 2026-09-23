@@ -5,13 +5,16 @@
 #
 #  Использование (на свежем Ubuntu-подобном сервере, пользователь с sudo):
 #
-#    1) Скопировать на сервер этот репозиторий (или только bootstrap.sh
-#       + secrets.env.example -> secrets.env) и заполнить secrets.env.
+#    Одна команда (всё тянется с GitHub, секреты вводятся интерактивно):
+#         B=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/scroogem/server-infra/main/bootstrap.sh -o "$B" && sudo bash "$B"; code=$?; rm -f "$B"; exit $code
 #
-#    2) Запустить:
-#         sudo bash bootstrap.sh [secrets.env]
-#       или указать файл через переменную:
-#         SECRETS_FILE=/path/secrets.env sudo -E bash bootstrap.sh
+#    Или с заранее подготовленным файлом секретов (тот же принцип):
+#         B=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/scroogem/server-infra/main/bootstrap.sh -o "$B" && SECRETS_FILE=/root/secrets.env sudo -E bash "$B"; code=$?; rm -f "$B"; exit $code
+#         # либо уже имея локальный репозиторий:
+#         sudo bash bootstrap.sh [/path/secrets.env]
+#
+#    Для неинтерактивного запуска (CI) с файлом секретов:
+#         INTERACTIVE=0 SECRETS_FILE=/path/secrets.env sudo -E bash bootstrap.sh
 #
 #  Что делает:
 #    - ставит базовые пакеты (git, curl, build-essential, node, docker, ...)
@@ -45,19 +48,45 @@ say()  { printf '\033[1;36m[server-infra]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[server-infra]\033[0m WARNING: %s\n' "$*"; }
 die()  { printf '\033[1;31m[server-infra]\033[0m ERROR: %s\n' "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
+# Не даём git зависнуть на интерактивном запросе логина при пустом PAT.
+export GIT_TERMINAL_PROMPT=0
 
 # ---------- проверка прав ----------
 [ "$(id -u)" -eq 0 ] || die "Запустите с sudo: sudo bash bootstrap.sh"
 
 # ---------- секреты ----------
-[ -f "$SECRETS_FILE" ] || die "Файл секретов '$SECRETS_FILE' не найден. Скопируйте secrets.env.example -> secrets.env и заполните."
+# Приоритет: аргумент/$SECRETS_FILE > env > интерактивный ввод.
+INTERACTIVE="${INTERACTIVE:-1}"
+SECRETS_FILE="${1:-${SECRETS_FILE:-}}"
+if [ -n "$SECRETS_FILE" ] && [ -f "$SECRETS_FILE" ]; then
+  say "Читаю секреты из $SECRETS_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  source "$SECRETS_FILE"
+  set +a
+else
+  SECRETS_FILE=""
+fi
 
-set -a
-# shellcheck disable=SC1090
-source "$SECRETS_FILE"
-set +a
+# get_secret <name> <prompt> — берёт значение из env/файла, иначе спрашивает.
+get_secret() {
+  local name="$1" prompt="$2" val
+  val=$(printf '%s' "${!name:-}")
+  if [ -n "$val" ]; then
+    export "$name=$val"
+    return 0
+  fi
+  if [ "$INTERACTIVE" != "1" ]; then
+    export "$name="
+    return 0
+  fi
+  printf '\033[1;33m%s:\033[0m ' "$prompt" >&2
+  read -r -s -p '' val || { export "$name="; return 0; }
+  printf '\n' >&2
+  export "$name=$val"
+}
 
-[ -n "${GITHUB_TOKEN:-}" ] || warn "GITHUB_TOKEN пуст — клонирование приватных репо потребует ручного ввода."
+get_secret GITHUB_TOKEN "GitHub PAT (нужен для приватных репо и git-кредов; enter = пропустить)"
 
 # ---------- 1. базовые пакеты ----------
 say "Устанавливаю базовые пакеты..."
@@ -176,6 +205,54 @@ write_env() {
 }
 
 say "Раскладываю секреты по .env-файлам..."
+
+# В неинтерактивном режиме оставляем пустыми; в интерактивном — запрашиваем.
+ask_secret() { get_secret "$1" "$2"; }
+
+ask_secret VAIRY_SECRET_KEY              "vairy: SECRET_KEY"
+ask_secret VAIRY_JWT_SECRET_KEY          "vairy: JWT_SECRET_KEY"
+ask_secret VAIRY_ENCRYPTION_KEY          "vairy: ENCRYPTION_KEY"
+ask_secret VAIRY_DATABASE_URL            "vairy: DATABASE_URL"
+ask_secret VAIRY_SUPABASE_URL            "vairy: SUPABASE_URL"
+ask_secret VAIRY_SUPABASE_KEY            "vairy: SUPABASE_KEY"
+ask_secret VAIRY_SUPABASE_ANON_KEY       "vairy: SUPABASE_ANON_KEY"
+ask_secret VAIRY_SUPABASE_JWT_SECRET     "vairy: SUPABASE_JWT_SECRET"
+ask_secret VAIRY_PASSWORD_PEPPER         "vairy: PASSWORD_PEPPER"
+ask_secret VAIRY_UPSTASH_REDIS_REST_URL  "vairy: UPSTASH_REDIS_REST_URL"
+ask_secret VAIRY_UPSTASH_REDIS_REST_TOKEN "vairy: UPSTASH_REDIS_REST_TOKEN"
+ask_secret VAIRY_REDIS_URL               "vairy: REDIS_URL"
+ask_secret VAIRY_GOOGLE_CLIENT_ID        "vairy: GOOGLE_CLIENT_ID"
+ask_secret VAIRY_GEMINI_API_KEY          "vairy: GEMINI_API_KEY"
+
+ask_secret TALKY_SOCIAL_TRAINER_SECRET_KEY         "talky: SECRET_KEY"
+ask_secret TALKY_SOCIAL_TRAINER_JWT_SECRET         "talky: JWT_SECRET"
+ask_secret TALKY_SOCIAL_TRAINER_PASSWORD_PEPPER    "talky: PASSWORD_PEPPER"
+ask_secret TALKY_SOCIAL_TRAINER_DB_URL             "talky: DB_URL"
+ask_secret TALKY_SOCIAL_TRAINER_SUPABASE_URL       "talky: SUPABASE_URL"
+ask_secret TALKY_SOCIAL_TRAINER_SUPABASE_ANON_KEY  "talky: SUPABASE_ANON_KEY"
+ask_secret TALKY_SOCIAL_TRAINER_REDIS_URL          "talky: REDIS_URL"
+ask_secret TALKY_SOCIAL_TRAINER_GOOGLE_CLIENT_ID   "talky: GOOGLE_CLIENT_ID"
+ask_secret TALKY_SOCIAL_TRAINER_GEMINI_KEY         "talky: GEMINI_KEY"
+
+ask_secret CLAUDE_WEB_AUTH_TOKEN "claude-web: AUTH_TOKEN"
+
+ask_secret GRAMGIFT_DATABASE_URL     "gramgift: DATABASE_URL"
+ask_secret GRAMGIFT_APP_BASE_URL     "gramgift: APP_BASE_URL"
+ask_secret GRAMGIFT_ADMIN_IDS        "gramgift: ADMIN_IDS"
+ask_secret GRAMGIFT_JWT_SECRET       "gramgift: JWT_SECRET"
+ask_secret GRAMGIFT_ALLOWED_BOT_USERS "gramgift: ALLOWED_BOT_USERS"
+ask_secret GRAMGIFT_BOT_TOKEN        "gramgift: BOT_TOKEN"
+ask_secret GRAMGIFT_ADMIN_PASSWORD   "gramgift: ADMIN_PASSWORD"
+ask_secret GRAMGIFT_POSTGRES_PASSWORD "gramgift: POSTGRES_PASSWORD"
+
+ask_secret OMNIROUTE_JWT_SECRET           "omniroute: JWT_SECRET (enter = пропустить)"
+ask_secret OMNIROUTE_STORAGE_ENCRYPTION_KEY "omniroute: STORAGE_ENCRYPTION_KEY (enter = пропустить)"
+ask_secret OMNIROUTE_API_KEY_SECRET        "omniroute: API_KEY_SECRET (enter = пропустить)"
+
+ask_secret CLAUDE_CREDENTIALS_B64      "claude: base64(.credentials.json) (enter = пропустить)"
+ask_secret CLOUDFLARED_TUNNEL_ID       "cloudflared: TUNNEL_ID (enter = пропустить)"
+ask_secret CLOUDFLARED_CREDENTIALS_JSON "cloudflared: содержимое <tunnel-id>.json (enter = пропустить)"
+ask_secret TAILSCALE_AUTHKEY           "tailscale: AUTHKEY (enter = вручную sudo tailscale up)"
 
 write_env "$RUN_HOME/stack/vairy/.env" \
   SECRET_KEY "${VAIRY_SECRET_KEY:-}" \

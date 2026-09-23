@@ -9,33 +9,37 @@
 ## ⚡ Быстрый старт — одна команда
 
 Всё восстановление автоматизировано скриптом [`bootstrap.sh`](bootstrap.sh).
-Быстрее всего перенести систему следующим образом:
+На новом сервере (Ubuntu, пользователь с sudo) достаточно **одной команды**:
 
-1. **Заполнить секреты.** На этой машине скопируйте шаблон и заполните ключи:
-   ```bash
-   cp secrets.env.example secrets.env
-   $EDITOR secrets.env
-   ```
-   Все значения секретов — из проекта/сервера (см. раздел 6 «Где лежат секреты»).
-   Для туннеля дополнительно нужен `CLOUDFLARED_CREDENTIALS_JSON`
-   (`cat ~/stack/cloudflared/*.json`) и `CLAUDE_CREDENTIALS_B64`
-   (`base64 -w0 ~/.claude/.credentials.json`).
+```bash
+B=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/scroogem/server-infra/main/bootstrap.sh -o "$B" && sudo bash "$B"; rc=$?; rm -f "$B"; exit $rc
+```
 
-2. **Перенести на новый сервер** (в любом месте, куда есть sudo-доступ):
-   ```bash
-   scp -r ~/stack/server-infra user@newserver:/opt/server-infra
-   scp secrets.env user@newserver:/opt/server-infra/
-   ```
-
-3. **Запустить на новом сервере:**
-   ```bash
-   sudo bash /opt/server-infra/bootstrap.sh /opt/server-infra/secrets.env
-   ```
-
-Скрипт сам: ставит пакеты (git/docker/node/pnpm/tailscale), клонирует все
-проекты, раскладывает `.env`, ставит systemd-юниты, поднимает Docker-стек
+Скрипт скачивается во временный файл (не пайпом — так работает интерактивный
+ввод секретов), сам ставит пакеты (git/docker/node/pnpm/tailscale), клонирует
+все проекты, раскладывает `.env`, ставит systemd-юниты, поднимает Docker-стек
 vairy+talky+cloudflared, включает opencode/claude-web и печатает сводку
 проверок доступности. Идемпотентен — перезапуск безопасен.
+
+Недостающие секреты скрипт **спросит интерактивно** (GITHUB_TOKEN, ключи
+vairy/talky, claude, cloudflared, tailscale, gramgift). Если часть ключей
+не вводить (enter), отсечение по ним просто пропустится — потом можно
+дозаполнить `secrets.env` и перезапустить.
+
+Если у вас уже есть заполненный `secrets.env` (шаблон — [`secrets.env.example`](secrets.env.example)),
+передайте его через `SECRETS_FILE`, чтобы не отвечать на вопросы:
+
+```bash
+B=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/scroogem/server-infra/main/bootstrap.sh -o "$B" && SECRETS_FILE=/root/secrets.env sudo -E bash "$B"; rc=$?; rm -f "$B"; exit $rc
+```
+
+Или с локального клона репозитория:
+
+```bash
+sudo bash bootstrap.sh [/path/secrets.env]
+```
+
+Для неинтерактивного запуска (CI): `INTERACTIVE=0 SECRETS_FILE=/path/secrets.env sudo -E bash bootstrap.sh`.
 
 Опции: `SKIP_FOREIGN=1` (не клонировать OmniRoute/career-ops, по умолчанию),
 `KEEP_SECRETS=1` (не удалять `secrets.env` после выполнения).
@@ -108,7 +112,7 @@ systemctl --user list-units --type=service --state=running
 | `/home/max/stack/talky` | `scroogem/talky` (private) | искл.: `.env`, `.github/workflows/` |
 | `/home/max/stack/vairy` | `scroogem/vairy-deploy` (private) | искл.: `.env`, `.github/workflows/` |
 | `/home/max/opencode-mobile` | `scroogem/opencode-mobile` (private) | полностью |
-| `/home/max/stack/server-infra` | `scroogem/server-infra` (private) | = этот репозиторий |
+| `/home/max/stack/server-infra` | `scroogem/server-infra` (**public**, с 2026-09-23) | = этот репозиторий |
 
 Остальные репо на `scroogem`: `Lambo` (private), `miniapp` (public), `qheid` (private),
 `taouse` (public), `vairy-site` (public).
