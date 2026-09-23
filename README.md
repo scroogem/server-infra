@@ -94,8 +94,34 @@ systemctl --user list-units --type=service --state=running
 
 - Node.js `v24.19.0`, pnpm `12.3.4` в `/home/max/.npm-global/bin` (НЕ в PATH по умолчанию —
   добавлен строчкой `export PATH="$HOME/.npm-global/bin:$PATH"` в `~/.profile` и `~/.bashrc`).
-- Манифесты opencode агента: см. `~/.config/opencode/`.
+- Манифесты и плагины opencode-агента — **версионируются здесь**: [`opencode/`](opencode/)
+  (`opencode.jsonc`, `AGENTS.md`, `plugin/anti-loop.ts`, `plugin/mem0.ts`). Копируются
+  bootstrap-ом в `~/.config/opencode/` вместе с `npm install` зависимостей плагинов.
+- **mem0** — долговременная память агента: CLI `@mem0/cli`, память в облаке mem0.ai.
+  Установку и восстановление делает bootstrap (см. раздел «mem0» ниже).
 - Docker + docker compose (стек vairy/talky).
+
+## 4b. mem0 (долговременная память opencode)
+
+Агент opencode умеет помнить факты между сессиями через плагин `opencode/plugin/mem0.ts`:
+`mem0_search` (найти факты о пользователе/проектах) и `mem0_add` (сохранить новый факт).
+
+- Память физически хранится **в облаке mem0.ai** и привязана к API-ключу из
+  `~/.mem0/config.json`. При переезде ключ «тянет» всю память за собой.
+- CLI ставится bootstrap-ом; конфиг восстанавливается из секретов
+  `MEM0_API_KEY` / `MEM0_USER_ID` (см. `secrets.env.example`).
+- Если ключ не вводили (пропустили при bootstrap) — после восстановления выполните от `max`:
+  ```bash
+  mem0 init --email ваш@email
+  ```
+  Ключ выпустится заново, память подтянется автоматически.
+- Проверка после переезда:
+  ```bash
+  mem0 search "какие проекты я разрабатываю?" -o json | head -c 400
+  # и: mem0 add "тест после миграции" -o quiet
+  ```
+- Для mem0-инструментов в самой памяти: без ограничений идёт search перед работой
+  в новой сессии; над фактом add — записывайте устойчивые сведения.
 
 ## 5. Проекты и их репозитории на GitHub
 
@@ -121,6 +147,7 @@ systemctl --user list-units --type=service --state=running
 
 - `~/.git-credentials` — GitHub PAT (fine-grained, умеет пушить в существующие репо, но НЕ создаёт новые; создание делается другим классическим токеном).
 - `~/.ssh/` — SSH-ключи.
+- `~/.mem0/config.json` — API-ключ mem0 (долговременная память opencode; значение — `platform.api_key`, `defaults.user_id`).
 - `~/.omniroute/server.env` — переменные OmniRoute.
 - `~/projects/claude-web/.env` — AUTH_TOKEN для claude-web.
 - `~/projects/gramgift/.env` — DATABASE_URL, JWT_SECRET, BOT_TOKEN.
@@ -168,6 +195,13 @@ mkdir -p ~/.config/systemd/user
 cp server-infra/systemd/*.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now opencode-web opencode-mobile   # критично!
+# 5b. opencode-агент (манифесты, плагины, mem0):
+cp -r server-infra/opencode/plugin ~/.config/opencode/
+cp server-infra/opencode/opencode.jsonc server-infra/opencode/AGENTS.md \
+   server-infra/opencode/package.json server-infra/opencode/package-lock.json ~/.config/opencode/
+cd ~/.config/opencode && npm install --no-audit --no-fund
+# 5c. mem0 (память): либо скопировать ~/.mem0/config.json со старой машины, либо:
+mem0 init --email ваш@email   # выпустит ключ, память подтянется из облака
 # 6. Стек:
 cd ~/stack && docker compose up -d talky cloudflared
 # 7. Tailscale: https://tailscale.com (узел giadaserver), funnel через `tailscale funnel 4097`.

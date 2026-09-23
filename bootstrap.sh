@@ -129,6 +129,12 @@ if ! have claude; then
   npm install -g @anthropic-ai/claude-code || warn "claude CLI не установился."
 fi
 
+# ---------- 4b. mem0 CLI (долговременная память opencode-агента) ----------
+if ! have mem0; then
+  say "Устанавливаю mem0 CLI (@mem0/cli)..."
+  npm install -g @mem0/cli || warn "mem0 CLI не установился."
+fi
+
 # ---------- 5. tailscale ----------
 if ! have tailscale; then
   say "Устанавливаю tailscale..."
@@ -250,6 +256,8 @@ ask_secret OMNIROUTE_STORAGE_ENCRYPTION_KEY "omniroute: STORAGE_ENCRYPTION_KEY (
 ask_secret OMNIROUTE_API_KEY_SECRET        "omniroute: API_KEY_SECRET (enter = пропустить)"
 
 ask_secret CLAUDE_CREDENTIALS_B64      "claude: base64(.credentials.json) (enter = пропустить)"
+ask_secret MEM0_API_KEY                "mem0: API-ключ из ~/.mem0/config.json (enter = вручную после)"
+ask_secret MEM0_USER_ID                "mem0: user_id из ~/.mem0/config.json (enter = пропустить)"
 ask_secret CLOUDFLARED_TUNNEL_ID       "cloudflared: TUNNEL_ID (enter = пропустить)"
 ask_secret CLOUDFLARED_CREDENTIALS_JSON "cloudflared: содержимое <tunnel-id>.json (enter = пропустить)"
 ask_secret TAILSCALE_AUTHKEY           "tailscale: AUTHKEY (enter = вручную sudo tailscale up)"
@@ -319,6 +327,36 @@ if [ -n "${CLAUDE_CREDENTIALS_B64:-}" ]; then
   chmod 600 "$RUN_HOME/.claude/.credentials.json"
 fi
 
+# ---------- 9b. mem0 (долговременная память opencode) ----------
+# Память живёт в облаке mem0.ai и привязывается к API-ключу: как только ключ
+# восстановлен, все факты из прошлых сессий снова доступны. Без ключа —
+# после bootstrap выполняем вручную `mem0 init --email <email>`.
+if [ -n "${MEM0_API_KEY:-}" ]; then
+  say "Восстанавливаю ~/.mem0/config.json из MEM0_API_KEY..."
+  mkdir -p "$RUN_HOME/.mem0"
+  python3 - "$MEM0_API_KEY" "${MEM0_USER_ID:-}" > "$RUN_HOME/.mem0/config.json" <<'PY'
+import json, sys
+api_key, uid = sys.argv[1], sys.argv[2]
+cfg = {
+    "version": 1,
+    "defaults": {"user_id": uid, "agent_id": "", "app_id": "", "run_id": ""},
+    "platform": {
+        "api_key": api_key,
+        "base_url": "https://api.mem0.ai",
+        "user_email": "",
+        "agent_mode": False,
+        "agent_caller": "opencode",
+    },
+    "telemetry": {"anonymous_id": ""},
+}
+print(json.dumps(cfg, indent=2))
+PY
+  chown -R "$RUN_USER:$RUN_USER" "$RUN_HOME/.mem0"
+  chmod 600 "$RUN_HOME/.mem0/config.json"
+else
+  warn "MEM0_API_KEY пуст — после восстановления запустите от $RUN_USER: mem0 init --email ваш@email (память из облака подтянется по ключу)."
+fi
+
 # ---------- 10. Cloudflare Tunnel creds ----------
 if [ -n "${CLOUDFLARED_TUNNEL_ID:-}" ] && [ -n "${CLOUDFLARED_CREDENTIALS_JSON:-}" ]; then
   say "Восстанавливаю credentials Cloudflare Tunnel..."
@@ -360,6 +398,27 @@ done
 chown -R "$RUN_USER:$RUN_USER" "$RUN_HOME/.config/systemd/user"
 systemctl daemon-reload
 sudo -u "$RUN_USER" systemctl --user daemon-reload
+
+# ---------- 11b. opencode-агент: конфиги, плагины, зависимости ----------
+# Манифесты и плагины версионируются в server-infra/opencode/ и копируются
+# в ~/.config/opencode/. Плагин mem0.ts даёт агенту инструменты mem0_search /
+# mem0_add (долговременная память). Память самого ключа — mem0.ai (см. 9b).
+say "Восстанавливаю конфиги и плагины opencode..."
+mkdir -p "$RUN_HOME/.config/opencode/plugin"
+cp "$RUN_HOME/stack/server-infra/opencode/opencode.jsonc"  "$RUN_HOME/.config/opencode/"
+cp "$RUN_HOME/stack/server-infra/opencode/AGENTS.md"       "$RUN_HOME/.config/opencode/"
+cp "$RUN_HOME/stack/server-infra/opencode/package.json"    "$RUN_HOME/.config/opencode/"
+cp "$RUN_HOME/stack/server-infra/opencode/package-lock.json" "$RUN_HOME/.config/opencode/"
+cp "$RUN_HOME/stack/server-infra/opencode/plugin/"*.ts     "$RUN_HOME/.config/opencode/plugin/"
+chown -R "$RUN_USER:$RUN_USER" "$RUN_HOME/.config/opencode"
+if [ ! -d "$RUN_HOME/.config/opencode/node_modules" ]; then
+  say "Устанавливаю зависимости плагинов opencode (@opencode-ai/plugin)..."
+  sudo -u "$RUN_USER" bash -lc 'cd "$HOME/.config/opencode" && npm install --no-audit --no-fund >/dev/null 2>&1' \
+    || warn "npm install opencode-плагинов не удался — проверьте вручную."
+fi
+if ! sudo -u "$RUN_USER" bash -lc 'command -v mem0 >/dev/null 2>&1'; then
+  warn "mem0 CLI не виден от $RUN_USER — установите и настройте вручную (см. README, раздел mem0)."
+fi
 
 # ---------- 12. зависимости проектов ----------
 say "Устанавливаю зависимости проектов..."

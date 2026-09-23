@@ -1,0 +1,8 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "doom_loop": "deny"
+  },
+  "instructions": ["AGENTS.md"],
+  "plugin": ["./plugin/anti-loop.ts", "./plugin/mem0.ts"]
+}
